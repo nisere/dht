@@ -1,0 +1,63 @@
+The program starts by reading the servers file and creates an array of pointers to server structure.
+The server structure contains a hash and a memcached variable to talk to the server.
+I chose the key space such as a key has 4 bytes represented as a unsigned long int.
+I split this space in 10 equal intervals by computing maximum represented by 4 bytes / 10
+The hash of the first server = size of interval, and it gets the keys with hashes <= its hash.
+The hash of the second server = 2 * size of interval, and it gets the keys with hashes <= its hash.
+The hash of the 10th server = maximum represented by 4 bytes.
+This resulted in an uniform distribution of keys on servers.
+I used SHA1 to compute the hash for the first replica, and MD5 for the second.
+I used the first 4 bytes of the key hashes to compare with the server hashes.
+I used the binary search algorithm to look up the server on which a key should be put.
+When receiving a put command the program computes the SHA1 and MD5 hashes of the key;
+it searches the array of servers to determine two indexes (corresponding to the two hashes);
+it tries to put the object on the first replica (first index);
+if it fails, it will try on the successor, only if it's different from the second replica;
+it tries to put the object on the second replica (second index);
+if it fails, it will try on the successor, only if it's different from the first replica.
+When receiving a get command the program computes the SHA1 and MD5 hashes of the key;
+it searches the array of servers to determine two indexes (corresponding to the two hashes);
+it tries to read from the first replica (first index);
+if it fails or the key is not found, it will try from the second replica (second index);
+if it fails or the key is not found, it will try from the successor of the first replica (if != 2nd replica);
+if it fails or the key is not found, it will try from the successor of the second replica (if != 1st replica).
+The successor is used for write because servers can be unstable.
+The successor is used for read when a server is unavailable in case it was also unavailable at write time.
+The successor is used for read when the key is not found on the server in case it was unavailable at write time.
+Using successors worsened the performance but improved availability.
+The drop in performance is due to memcached consuming more time to determine a failure.
+
+Run ./challenge4.py to start mininet topology.
+Use the makefile to compile the source.
+The program contains test functions that are run only if the proper flag is set at compile time.
+Uncomment the TEST_DISTRIBUTION flag in Makefile to run the distribution test.
+Uncomment the TEST_THROUGHPUT flag in Makefile to run the throughput test.
+Uncomment the TEST_AVAILABILITY flag in Makefile to run the availability test.
+Uncomment one flag at the time.
+For normal use leave the flags commented. This reads the commands from stdin.
+The standard input can be redirected to a file which contains commands.
+The program reads the ip of the servers from the file called servers.
+The first argument of the program is always the number of servers.
+
+The distribution test determines the servers on which an object would be put without running put command.
+It takes as argument the number of keys that will be generated for the test in the format key_xxxxxx.
+The put command is modified in this case to stop after the servers are determined.
+It prints the server indexes (from 0 to 9).
+The test was run with ./dht 10 1000000 > output1
+The script1.sh was run, resulting the final output (output1_final) used for plot.
+
+The throughput test writes N objects and reads the N objects afterwards.
+It takes as arguments the number of keys (generated as above), and the size of the object (generated random).
+It prints the number of keys, the size, the write time, and the read time.
+The script2.sh was run and output2 was used for plot.
+The throughput was computed as the number of keys / time.
+
+The availability test writes N objects, waits for user input, and reads the N objects.
+The pause can be used to deactivate/activate links.
+The test takes as argument the number of keys (generated as before).
+It prints the number of keys, the number of written object, the number of read objects.
+The results of this test were gathered manually as follows:
+for i = 1..9 run ./dht 10 100, cut the link to the first i servers, continue program, write output in output3
+I added a first line for 0 unavailable servers, and last line for all 10 unavailable servers.
+I used the modified output3 file for plotting the percentage (read / written * 100)
+
